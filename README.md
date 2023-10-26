@@ -5,7 +5,7 @@ Code might not be the best, this was my first ever project in C++. Feel free to 
 
 The game is Speedrun oriented. The goal is to Collect all coins and get to the finish platform alive as fast as possible. There are 3 levels of difficulty and 2 cities to be played in.
 
-Play with (Windows, mingw32)
+Play with (Windows)
 ````
 start bin/release/main
 ````
@@ -18,3 +18,4 @@ Some gameplay:
 
 https://github.com/achaval-tomas/SkyLine-Adventure/assets/134091945/63c47894-4c3a-4080-850d-d363b1b2f02a
 
+[Dowload and install SDL](https://www.libsdl.org/)
