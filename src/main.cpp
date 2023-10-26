@@ -163,8 +163,8 @@ int main(int argc, char* args[]){
 
 	SDL_Event event;
 
-	// INITIALIZE ALL NUMBER VARIABLES
-	const float timeStep = 0.015f;
+	// INITIALIZE ALL NUMERIC VARIABLES
+	const float timeStep = 0.033f;
 	float accumulator    = 0.0f;
 	float currentTime    = utils::hireTimeInSeconds();
 	float gameTime       = 0.0f;
@@ -221,30 +221,234 @@ int main(int argc, char* args[]){
 				game.Quit();
 			}
 
-		/*                                 HANDLE KEYBOARD INPUTS                                        */
+			if (game.BeingPlayed()){
+				/*                             UPDATE GAMETIME                                   */
+				gameTime = utils::hireTimeInSeconds() - startTime;
 
-			if(PRESSED_RESTART){
-				Mix_HaltChannel(-1);
-				lastResetTime = currentTime;
+				/*                           SET UP GAME IF NEEDED                               */
+				if (game.NeedsSetUp()){
 
-				game.Restart();
-			}
+					// GAME STATS SET UP
+					startTime = utils::hireTimeInSeconds();
+					highScoreStr = std::to_string(highScore);
+					highScoreStr.resize(5);
+					timeToBeat.destroyText();
+					timeToBeat = Text(TIME_TO_BEAT_PARAMS);
 
-			if(PRESSED_ESCAPE){
-				lastResetTime = currentTime;
+					// COIN-RELATED SET UP
+					coinsCollected = 0;
+					coins.clear();
+					for (Entity& plat : platforms){
+						if (plat.getPos().y < GROUND_HEIGHT){
+							Entity coin(Vector2f(10 + plat.getPos().x + rand() % 230 , plat.getPos().y -  20),  coinTex);		
+							coins.push_back(coin);
+							coin.setPos(Vector2f(10 + plat.getPos().x + rand() % 230 , plat.getPos().y -  20));
+							coins.push_back(coin);
+						}
+					}
+					max_coins = coins.size();
+					maxCoinsStr  = std::to_string(max_coins);
+					coinsInfo.destroyText();
+					coinsInfo = Text(COINS_INFO_PARAMS);
 
-				Mix_FadeOutMusic(1000);
-				Mix_HaltChannel(-1);
+					// PLAYER SET UP
+					player.setPos(PLAYER_START_POS);
+					player.setTex(&player, playerStandTex);
+					player.setCrouch(false);
+					player.setSpeed(ZERO_VECT);
 
-				timeToBeat.destroyText();
-				coinsInfo.destroyText();
-				highScore = HIGH_SCORE_STARTER;
+					// BULLETS SET UP
+			   	 	for(MovingEntity* bul : comingBullets){
+						bul->setPos(BULLET_LEFT_GEN);
+						bul->setSpeed(BULLET_LEFT_SPEED);
+						bul->setTex(bul, bulletTex);
+					}
 
-				game.Leave();
-			}
+					game.SetUpDone();
+				}
 
-			/*                                   MAIN MENU SCREEN                                       */
-			if(game.AtMainMenu()){
+				/*                         OFFSET MOVING PLATFORMS AND OBJECTS                            */
+				offsetPlat = 50*sin(gameTime);
+				winningPlatform->setPos(WINNING_PLATFORM_SET_OFFSET_POS);
+				winningFlag.setPos(WINNING_FLAG_COORDS);
+
+				/*                       HANDLE MOVING PLATFORM PUSHING PLAYER                             */
+				if (player.getPos().y < WINNING_PLATFORM_Y + WINNING_PLATFORM_HEIGHT){
+					platPosDiff -= winningPlatform->getPos().x;
+					player.adjustToMovement(&player, winningPlatform, platPosDiff);
+				}
+
+				/*                              HANDLE PLAYER CONTROLS                                     */
+				if (PRESSED_CROUCH){
+					player.pCrouch(&player, platforms, playerCrouchTex, playerStandTex);
+					Mix_PlayChannel(-1, crouchSound, 0);
+					lastCrouchTime = currentTime;
+				} else if(PRESSED_JUMP){
+					if (!player.getCrouch()){
+						player.setSpeed(Vector2f(player.getSpeed().x, player.getSpeed().y - 13));
+					} else {
+						player.setSpeed(Vector2f(player.getSpeed().x, player.getSpeed().y - 8));
+					}
+					lastJumpTime = currentTime;
+					Mix_PlayChannel(-1, jumpSound, 0);
+				} else if(PRESSED_DOWN){
+					player.moveDown(&player, platforms);
+				}
+
+				if (PRESSED_LEFT){
+					player.moveLeft(&player, platforms);
+					if(!player.getCrouch()){
+					  	player.setTex(&player, playerLeftTex);
+			   		} else {
+			    		player.setTex(&player, playerCrouchLeftTex); 
+					}
+				}
+
+				if (PRESSED_RIGHT){
+					player.moveRight(&player, platforms);
+					if(!player.getCrouch()){
+					    player.setTex(&player, playerRightTex);
+					} else {
+					    player.setTex(&player, playerCrouchRightTex);
+					}
+				}
+
+
+		        /*                                HANDLING ALL MOVING ENTITIES                                */
+				for(MovingEntity* ent : movingEntities){
+					if (ent->getSpeed().x > 0.0f){
+						ent->moveRight(ent, platforms);
+						ent->setSpeed(Vector2f(ent->getSpeed().x - 1, ent->getSpeed().y));
+					} else if (ent->getSpeed().x < 0.0f){
+						ent->moveLeft(ent, platforms);
+						ent->setSpeed(Vector2f(ent->getSpeed().x + 1, ent->getSpeed().y));
+					}
+					if (ent->getSpeed().y > 0.0f){
+						ent->moveDown(ent, platforms);
+						ent->setSpeed(Vector2f(ent->getSpeed().x, ent->getSpeed().y - 1));
+					} else if (ent->getSpeed().y < 0.0f){
+						ent->moveUp(ent, platforms);
+						ent->setSpeed(Vector2f(ent->getSpeed().x, ent->getSpeed().y + 1));
+					}
+				}
+
+				if (player.getSpeed().y == 0.0f){
+					player.moveDown(&player, platforms);   // Player is constantly and inevitably falling down like "Gravity".
+				}
+
+			    /*                                 HANDLE BULLET REGENERATION                                  */
+				for(MovingEntity* bul : comingBullets){
+					if (bul->getCollision()){
+						if (BULLET_LOW_INTERVAL){
+							if (bul->getTex() != bulletTex)
+								bul->setTex(bul, bulletTex);
+
+							bul->setPos(BULLET_LEFT_GEN);
+							bul->setSpeed(BULLET_LEFT_SPEED);
+						} else {
+							if (bul->getTex() != superBulletTex) 
+								bul->setTex(bul, superBulletTex);
+
+	        	        	bul->setPos(BULLET_RIGHT_GEN);
+							bul->setSpeed(BULLET_RIGHT_SPEED);
+						}
+				    }
+				}
+
+				/*                                    HANDLING COIN COLLECTION                                 */
+				coinIndex = player.collectedCoin(&player, coins);
+				if (coinIndex < coins.size()){
+					Mix_PlayChannel(-1, coinSound, 0);
+					coins.erase(coins.begin() + coinIndex);
+					coins.shrink_to_fit();
+					coinsCollected += 1;
+
+					coinsInfo.destroyText();
+					coinsInfo = Text(COINS_INFO_PARAMS);
+				}
+
+				/*                             RENDER AND DISPLAY EVERYTHING ON SCREEN                         */
+				window.clear();
+				window.render(background);
+
+				for(Entity& plat : platforms){
+					window.render(plat);
+				}
+
+				for(Entity& coin : coins){             // RENDER ALL COINS WITH WAVING OFFSET
+					offsetCoin = 1.5*sin(gameTime*10);
+					coin.setPos(Vector2f(coin.getPos().x, coin.getPos().y + offsetCoin));
+					window.render(coin);
+					coin.setPos(Vector2f(coin.getPos().x, coin.getPos().y - offsetCoin));
+				}
+
+				for(MovingEntity* ent : movingEntities){
+					window.render(*ent);
+				}
+
+				window.render(coinCounter);
+				window.render(winningFlag);
+
+				gameTimeStr = std::to_string(gameTime);
+				gameTimeStr = gameTimeStr.substr(0, gameTimeStr.find(".") + 4);
+				Text timer(TIMER_TEXT_PARAMS);
+
+				timeToBeat.displayText( 15, 670, renderer);
+				coinsInfo.displayText(1170,  12, renderer);
+				timer.displayText(560, 5, renderer);
+				
+				timer.destroyText();
+			
+				window.display();
+
+			   /*                                 HANDLING GAME OVER AND GAME WINNING                         */
+				if (PLAYER_LOST_THE_GAME){
+					window.clear();
+					window.render(background);
+					window.render(gameOver);
+
+					Mix_PlayChannel(-1, bulletHitSound, 0);
+
+					restartInfo.displayText(440, 630, renderer);
+					window.display();
+
+					game.EndRound();
+				} else if (PLAYER_WON_THE_GAME){
+
+					window.render(youWon);
+
+					timeDiffStr = std::to_string(gameTime-highScore);
+					timeDiffStr = timeDiffStr.substr(0, timeDiffStr.find(".") + 4);
+
+					if (gameTime <= highScore){
+						Mix_PlayChannel(-1, newRecordSound, 0);
+						newRecord.displayText(15, 5, renderer);
+
+						Text improvement(TIME_DIFF_NEG_PARAMS);
+						improvement.displayText(325, 670, renderer);
+						improvement.destroyText();
+
+						highScore = gameTime;
+					} else {
+						Mix_PlayChannel(-1, winSound, 0);
+						Text improvement(TIME_DIFF_POS_PARAMS);
+						improvement.displayText(325, 670, renderer);
+						improvement.destroyText();
+					}
+
+					restartInfo.displayText(440, 620, renderer);
+					window.display();
+
+					timeToBeat.destroyText();
+
+					game.EndRound();
+				}
+
+				// Winning platform re-set Offset.
+				platPosDiff = winningPlatform->getPos().x;
+			    winningPlatform->setPos(WINNING_PLATFORM_RESET_OFFSET_POS);
+
+			} else if (game.AtMainMenu()){
 
 				if (!Mix_PlayingMusic())
 					Mix_FadeInMusic(menuMusic, -1, 1500);
@@ -273,7 +477,7 @@ int main(int argc, char* args[]){
 				}
 
 
-			}  else if (game.CheckingControls()){
+			} else if (game.CheckingControls()){
 				window.clear();
 				window.render(menuBackground);
 
@@ -378,238 +582,27 @@ int main(int argc, char* args[]){
 				}
 
 
-			} else if (game.BeingPlayed()){
-				/*                             UPDATE GAMETIME                                   */
-				gameTime = utils::hireTimeInSeconds() - startTime;
+			}
+			/*                                 HANDLE KEYBOARD INPUTS                                        */
 
-				/*                           SET UP GAME IF NEEDED                               */
-				if (game.NeedsSetUp()){
+			if(PRESSED_RESTART){
+				Mix_HaltChannel(-1);
+				lastResetTime = currentTime;
 
-					// GAME STATS SET UP
-					startTime = utils::hireTimeInSeconds();
-					highScoreStr = std::to_string(highScore);
-					highScoreStr.resize(5);
-					timeToBeat.destroyText();
-					timeToBeat = Text(TIME_TO_BEAT_PARAMS);
+				game.Restart();
+			}
 
-					// COIN-RELATED SET UP
-					coinsCollected = 0;
-					coins.clear();
-					for (Entity& plat : platforms){
-						if (plat.getPos().y < GROUND_HEIGHT){
-							Entity coin(Vector2f(10 + plat.getPos().x + rand() % 230 , plat.getPos().y -  20),  coinTex);		
-							coins.push_back(coin);
-							coin.setPos(Vector2f(10 + plat.getPos().x + rand() % 230 , plat.getPos().y -  20));
-							coins.push_back(coin);
-						}
-					}
-					max_coins = coins.size();
-					maxCoinsStr  = std::to_string(max_coins);
-					coinsInfo.destroyText();
-					coinsInfo = Text(COINS_INFO_PARAMS);
+			if(PRESSED_ESCAPE){
+				lastResetTime = currentTime;
 
-					// PLAYER SET UP
-					player.setPos(PLAYER_START_POS);
-					player.setTex(&player, playerStandTex);
-					player.setCrouch(false);
-					player.setSpeed(ZERO_VECT);
+				Mix_FadeOutMusic(1000);
+				Mix_HaltChannel(-1);
 
-					// BULLETS SET UP
-			   	 	for(MovingEntity* bul : comingBullets){
-						bul->setPos(BULLET_LEFT_GEN);
-						bul->setSpeed(BULLET_LEFT_SPEED);
-						bul->setTex(bul, bulletTex);
-					}
+				timeToBeat.destroyText();
+				coinsInfo.destroyText();
+				highScore = HIGH_SCORE_STARTER;
 
-					game.SetUpDone();
-				}
-
-				/*                         OFFSET MOVING PLATFORMS AND OBJECTS                            */
-				offsetPlat = 50*sin(gameTime);
-				winningPlatform->setPos(WINNING_PLATFORM_SET_OFFSET_POS);
-				winningFlag.setPos(WINNING_FLAG_COORDS);
-
-				/*                       HANDLE MOVING PLATFORM PUSHING PLAYER                             */
-				if(player.getPos().y < WINNING_PLATFORM_Y + WINNING_PLATFORM_HEIGHT){
-					platPosDiff -= winningPlatform->getPos().x;
-					player.adjustToMovement(&player, winningPlatform, platPosDiff);
-				}
-
-				/*                              HANDLE PLAYER CONTROLS                                     */
-				if(PRESSED_JUMP){
-					if (!player.getCrouch()){
-						player.setSpeed(Vector2f(player.getSpeed().x, player.getSpeed().y - 13));
-					} else {
-						player.setSpeed(Vector2f(player.getSpeed().x, player.getSpeed().y - 8));
-					}
-					lastJumpTime = currentTime;
-					Mix_PlayChannel(-1, jumpSound, 0);
-				}
-
-				if(PRESSED_DOWN){
-					player.moveDown(&player, platforms);
-				}
-
-				if(PRESSED_LEFT){
-					player.moveLeft(&player, platforms);
-					if(!player.getCrouch()){
-					  	player.setTex(&player, playerLeftTex);
-			   		} else {
-			    		player.setTex(&player, playerCrouchLeftTex); 
-					}
-				}
-
-				if(PRESSED_RIGHT){
-					player.moveRight(&player, platforms);
-					if(!player.getCrouch()){
-					    player.setTex(&player, playerRightTex);
-					} else {
-					    player.setTex(&player, playerCrouchRightTex);
-					}
-				}
-
-				if(PRESSED_CROUCH){
-					player.pCrouch(&player, platforms, playerCrouchTex, playerStandTex);
-					Mix_PlayChannel(-1, crouchSound, 0);
-					lastCrouchTime = currentTime;
-				}
-
-		        /*                                HANDLING ALL MOVING ENTITIES                                */
-				for(MovingEntity* ent : movingEntities){
-					if (ent->getSpeed().x > 0.0f){
-						ent->moveRight(ent, platforms);
-						ent->setSpeed(Vector2f(ent->getSpeed().x - 1, ent->getSpeed().y));
-					} else if (ent->getSpeed().x < 0.0f){
-						ent->moveLeft(ent, platforms);
-						ent->setSpeed(Vector2f(ent->getSpeed().x + 1, ent->getSpeed().y));
-					}
-					if (ent->getSpeed().y > 0.0f){
-						ent->moveDown(ent, platforms);
-						ent->setSpeed(Vector2f(ent->getSpeed().x, ent->getSpeed().y - 1));
-					} else if (ent->getSpeed().y < 0.0f){
-						ent->moveUp(ent, platforms);
-						ent->setSpeed(Vector2f(ent->getSpeed().x, ent->getSpeed().y + 1));
-					}
-				}
-
-				if (player.getSpeed().y == 0.0f){
-					player.moveDown(&player, platforms);   // Player is constantly and inevitably falling down like "Gravity".
-				}
-
-			    /*                                 HANDLE BULLET REGENERATION                                  */
-				for(MovingEntity* bul : comingBullets){
-					if (bul->getCollision()){
-						if (BULLET_LOW_INTERVAL){
-							if (bul->getTex() != bulletTex)
-								bul->setTex(bul, bulletTex);
-
-							bul->setPos(BULLET_LEFT_GEN);
-							bul->setSpeed(BULLET_LEFT_SPEED);
-						} else {
-							if (bul->getTex() != superBulletTex) 
-								bul->setTex(bul, superBulletTex);
-
-	        	        	bul->setPos(BULLET_RIGHT_GEN);
-							bul->setSpeed(BULLET_RIGHT_SPEED);
-						}
-				    }
-				}
-
-				/*                                    HANDLING COIN COLLECTION                                 */
-				coinIndex = player.collectedCoin(&player, coins);
-				if (coinIndex < coins.size()){
-					Mix_PlayChannel(-1, coinSound, 0);
-					coins.erase(coins.begin() + coinIndex);
-					coins.shrink_to_fit();
-					coinsCollected += 1;
-
-					coinsInfo.destroyText();
-					coinsInfo = Text(COINS_INFO_PARAMS);
-				}
-
-				/*                             RENDER AND DISPLAY EVERYTHING ON SCREEN                         */
-				window.clear();
-				window.render(background);
-
-				for(Entity& plat : platforms){
-					window.render(plat);
-				}
-
-				for(Entity& coin : coins){             // RENDER ALL COINS WITH WAVING OFFSET
-					offsetCoin = 1.5*sin(gameTime*10);
-					coin.setPos(Vector2f(coin.getPos().x, coin.getPos().y + offsetCoin));
-					window.render(coin);
-					coin.setPos(Vector2f(coin.getPos().x, coin.getPos().y - offsetCoin));
-				}
-
-				for(MovingEntity* ent : movingEntities){
-					window.render(*ent);
-				}
-
-				window.render(coinCounter);
-				window.render(winningFlag);
-
-				gameTimeStr = std::to_string(gameTime);
-				gameTimeStr = gameTimeStr.substr(0, gameTimeStr.find(".") + 4);
-				Text timer(TIMER_TEXT_PARAMS);
-
-				timeToBeat.displayText( 15, 670, renderer);
-				coinsInfo.displayText(1170,  12, renderer);
-				timer.displayText(560, 5, renderer);
-				
-				timer.destroyText();
-			
-				window.display();
-
-			   /*                                 HANDLING GAME OVER AND GAME WINNING                         */
-				if (PLAYER_LOST_THE_GAME){
-					window.clear();
-					window.render(background);
-					window.render(gameOver);
-
-					Mix_PlayChannel(-1, bulletHitSound, 0);
-
-					restartInfo.displayText(440, 630, renderer);
-					window.display();
-
-					game.EndRound();
-				}
-
-				if (PLAYER_WON_THE_GAME){
-
-					window.render(youWon);
-
-					timeDiffStr = std::to_string(gameTime-highScore);
-					timeDiffStr = timeDiffStr.substr(0, timeDiffStr.find(".") + 4);
-
-					if (gameTime <= highScore){
-						Mix_PlayChannel(-1, newRecordSound, 0);
-						newRecord.displayText(15, 5, renderer);
-
-						Text improvement(TIME_DIFF_NEG_PARAMS);
-						improvement.displayText(325, 670, renderer);
-						improvement.destroyText();
-
-						highScore = gameTime;
-					} else {
-						Mix_PlayChannel(-1, winSound, 0);
-						Text improvement(TIME_DIFF_POS_PARAMS);
-						improvement.displayText(325, 670, renderer);
-						improvement.destroyText();
-					}
-
-					restartInfo.displayText(440, 620, renderer);
-					window.display();
-
-					timeToBeat.destroyText();
-
-					game.EndRound();
-				}
-
-				// Winning platform re-set Offset.
-				platPosDiff = winningPlatform->getPos().x;
-			    winningPlatform->setPos(WINNING_PLATFORM_RESET_OFFSET_POS);
-
+				game.Leave();
 			}
 		}
 	}
