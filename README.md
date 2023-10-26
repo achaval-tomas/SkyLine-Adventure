@@ -7,7 +7,7 @@ The game is Speedrun oriented. The goal is to Collect all coins and get to the f
 
 Play with
 ````
-g++ -o play -I include src/*.cpp \`sdl2-config --cflags --libs\` -lSDL2 -lSDL2_mixer -lSDL2_image -lSDL2_ttf
+g++ -o play -I include src/*.cpp -lSDL2 -lSDL2_mixer -lSDL2_image -lSDL2_ttf
 ./play
 ````
 
