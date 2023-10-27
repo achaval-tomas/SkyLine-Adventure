@@ -18,4 +18,4 @@ Some gameplay:
 
 https://github.com/achaval-tomas/SkyLine-Adventure/assets/134091945/63c47894-4c3a-4080-850d-d363b1b2f02a
 
-[Download and install SDL](https://www.libsdl.org/)
+**Necessary Libraries are included in bin/release. If this doesn't work for you, you may need to [Download and install SDL](https://www.libsdl.org/) and/or [mingw](https://www.mingw-w64.org/)**
