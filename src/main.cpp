@@ -380,13 +380,13 @@ int main(int argc, char* args[]){
 
 			} else if (game.BeingPlayed()){
 				/*                             UPDATE GAMETIME                                   */
-				gameTime = utils::hireTimeInSeconds() - startTime;
+				gameTime = newTime - startTime;
 
 				/*                           SET UP GAME IF NEEDED                               */
 				if (game.NeedsSetUp()){
 
 					// GAME STATS SET UP
-					startTime = utils::hireTimeInSeconds();
+					startTime = newTime;
 					highScoreStr = std::to_string(highScore);
 					highScoreStr.resize(5);
 					timeToBeat.destroyText();
@@ -474,30 +474,26 @@ int main(int argc, char* args[]){
 					lastCrouchTime = currentTime;
 				}
 
-		        /*                                HANDLING ALL MOVING ENTITIES                                */
-				for(MovingEntity* ent : movingEntities){
-					if (ent->getSpeed().x > 0.0f){
-						ent->moveRight(ent, platforms);
-						ent->setSpeed(Vector2f(ent->getSpeed().x - 1, ent->getSpeed().y));
-					} else if (ent->getSpeed().x < 0.0f){
-						ent->moveLeft(ent, platforms);
-						ent->setSpeed(Vector2f(ent->getSpeed().x + 1, ent->getSpeed().y));
-					}
-					if (ent->getSpeed().y > 0.0f){
-						ent->moveDown(ent, platforms);
-						ent->setSpeed(Vector2f(ent->getSpeed().x, ent->getSpeed().y - 1));
-					} else if (ent->getSpeed().y < 0.0f){
-						ent->moveUp(ent, platforms);
-						ent->setSpeed(Vector2f(ent->getSpeed().x, ent->getSpeed().y + 1));
-					}
-				}
-
+		        /*                                HANDLING ALL MOVING ENTITIES (now only player)                                */
 				if (player.getSpeed().y == 0.0f){
 					player.moveDown(&player, platforms);   // Player is constantly and inevitably falling down like "Gravity".
+				} else if (player.getSpeed().y > 0.0f){
+					player.moveDown(&player, platforms);
+					player.setSpeed(Vector2f(player.getSpeed().x, player.getSpeed().y - 1));
+				} else {
+					player.moveUp(&player, platforms);
+					player.setSpeed(Vector2f(player.getSpeed().x, player.getSpeed().y + 1));
 				}
 
-			    /*                                 HANDLE BULLET REGENERATION                                  */
+			    /*                                             HANDLE BULLETS                                         */
 				for(MovingEntity* bul : comingBullets){
+					if (bul->getSpeed().x > 0.0f){
+						bul->moveRight(bul, platforms);
+						bul->setSpeed(Vector2f(bul->getSpeed().x - 1, bul->getSpeed().y));
+					} else if (bul->getSpeed().x < 0.0f){
+						bul->moveLeft(bul, platforms);
+						bul->setSpeed(Vector2f(bul->getSpeed().x + 1, bul->getSpeed().y));
+					}
 					if (bul->getCollision()){
 						if (BULLET_LOW_INTERVAL){
 							if (bul->getTex() != bulletTex)
@@ -515,7 +511,7 @@ int main(int argc, char* args[]){
 				    }
 				}
 
-				/*                                    HANDLING COIN COLLECTION                                 */
+				/*                                          HANDLE COINS                                        */
 				coinIndex = player.collectedCoin(&player, coins);
 				if (coinIndex < coins.size()){
 					Mix_PlayChannel(-1, coinSound, 0);
@@ -573,9 +569,7 @@ int main(int argc, char* args[]){
 					window.display();
 
 					game.EndRound();
-				}
-
-				if (PLAYER_WON_THE_GAME){
+				} else if (PLAYER_WON_THE_GAME){
 
 					window.render(youWon);
 
