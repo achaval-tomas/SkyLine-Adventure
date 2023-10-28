@@ -19,7 +19,7 @@ On Linux, or WSL
 ./bin/release/mainLinux
 ````
 
-## How to re-compile the game (this may fix performance issues)
+## How to re-compile the game
 On windows with [mingw](https://www.mingw-w64.org/)
 ````
 g++ -c src/*.cpp -std=c++14 -O3 -Wall -m64 -I include -I /bin/release && g++ *.o -o bin/release/main -s -L /bin/release -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer
